@@ -1,0 +1,207 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QInETouch Config Tool</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <!-- 悬浮工具栏 -->
+    <div id="toolbar" class="floating-panel">
+        <div class="panel-header" id="toolbarHeader">
+            <span>QInETouch 配置</span>
+            <span class="toggle-btn" id="toolbarToggle" title="折叠/展开">−</span>
+        </div>
+        
+        <div class="panel-content" id="toolbarContent">
+            <!-- 模块列表 (只显示标题，点击弹出子面板) -->
+            <div class="module-list">
+                <button class="module-btn" onclick="openSubPanel('basic')">基础设置 & 截图</button>
+                <button class="module-btn" onclick="openSubPanel('components')">添加组件 (拖拽)</button>
+                <button class="module-btn" onclick="openSubPanel('scroll')">鼠标滚轮配置</button>
+                <button class="module-btn" onclick="openSubPanel('advanced')">高级参数微调</button>
+                <button class="module-btn" onclick="openSubPanel('activation')">设备激活</button>
+            </div>
+
+            <div class="footer-actions">
+                <button id="loadBtn" class="action-btn secondary">读取</button>
+                <button id="saveBtn" class="action-btn primary">保存配置</button>
+            </div>
+            <div id="status">等待操作...</div>
+        </div>
+    </div>
+
+    <!-- 子面板容器 (动态显示内容) -->
+    <div id="subPanel" class="floating-sub-panel" style="display: none;">
+        <div class="sub-header">
+            <span id="subPanelTitle">标题</span>
+            <span class="close-btn" onclick="closeSubPanel()">×</span>
+        </div>
+        <div class="sub-content" id="subPanelContent">
+            <!-- 内容将通过 JS 动态移动到这里 -->
+        </div>
+    </div>
+
+    <!-- 隐藏的配置内容源 (DOM结构) -->
+    <div id="configSources" style="display: none;">
+        <!-- 1. 基础配置 -->
+        <div id="source-basic">
+            <div class="info-row">
+                <label>上传截图:</label>
+                <input id="imgInput" type="file" accept="image/*">
+            </div>
+            <div class="info-row">
+                <span>参考分辨率: </span>
+                <input id="targetW" type="number" class="small-input" placeholder="W"> x 
+                <input id="targetH" type="number" class="small-input" placeholder="H">
+            </div>
+        </div>
+
+        <!-- 2. 添加组件 -->
+        <div id="source-components">
+            <div class="btn-grid">
+                <button id="btnAddWheel">WASD 轮盘</button>
+                <button id="btnAddView">视角滑动区域</button>
+            </div>
+            <div class="btn-grid">
+                <button id="btnAddMouseWheel">添加鼠标轮盘 (Tab/4...)</button>
+            </div>
+            <p class="help-text">说明：若要使用中键进入鼠标轮盘模式，请点击上方按钮并按下中键(MMB)进行绑定。在此模式下，按下中键时鼠标会隐藏并锁定在组件中心，移动鼠标即可触发滑动。</p>
+            <div class="btn-grid">
+                <button id="btnAddLMB">鼠标左键</button>
+                <button id="btnAddRMB">鼠标右键</button>
+            </div>
+            <div class="btn-grid">
+                <button id="btnAddSide1">侧键 1 (X1)</button>
+                <button id="btnAddSide2">侧键 2 (X2)</button>
+            </div>
+            <button id="btnAddCustom" class="full-btn">添加自定义按键 (按下键盘获取)</button>
+        </div>
+
+        <!-- 3. 滚轮配置 -->
+        <div id="source-scroll">
+            <div class="param-row">
+                <label>上滑 (Up):</label>
+                <select id="scrollUpMode" class="mini-select">
+                    <option value="none">无</option>
+                    <option value="tap">点击</option>
+                    <option value="swipe">滑动</option>
+                </select>
+                <button id="btnSetScrollUp" class="small-btn">设置</button>
+            </div>
+            <div class="param-row">
+                <label>下滑 (Down):</label>
+                <select id="scrollDownMode" class="mini-select">
+                    <option value="none">无</option>
+                    <option value="tap">点击</option>
+                    <option value="swipe">滑动</option>
+                </select>
+                <button id="btnSetScrollDown" class="small-btn">设置</button>
+            </div>
+            <div class="param-row">
+                <label>滑动耗时(ms):</label>
+                <input id="scrollDuration" type="number" value="200" class="small-input">
+            </div>
+        </div>
+
+        <!-- 4. 参数微调 -->
+        <div id="source-advanced">
+            <div class="param-row">
+                <label>串口号:</label>
+                <input id="portInput" type="text" placeholder="COM5" value="COM5" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>屏幕旋转:</label>
+                <select id="rotationInput" class="small-select">
+                    <option value="0">0 (竖屏)</option>
+                    <option value="90">90 (横屏)</option>
+                    <option value="180">180 (反竖)</option>
+                    <option value="270">270 (反横)</option>
+                </select>
+            </div>
+            <div class="param-row">
+                <label>切换键:</label>
+                <input id="toggleKeyInput" type="text" placeholder="ALT" value="ALT" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>遮罩键:</label>
+                <input id="overlayKeyInput" type="text" placeholder="F8" value="F8" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>遮罩缩放:</label>
+                <input id="overlayScaleInput" type="number" step="0.1" value="1.0" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="WASD轮盘半径">WASD半径:</label>
+                <input id="wheelRadius" type="number" value="160" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="静步键">静步键:</label>
+                <input id="wheelModifierKey" type="text" placeholder="SHIFT" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="静步半径">静步半径:</label>
+                <input id="wheelWalkRadius" type="number" value="80" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="弹簧刚度 (默认0.015, 越大越快)">轮盘刚度:</label>
+                <input id="wheelStiffness" type="number" step="0.001" value="0.015" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="阻尼系数 (默认0.25, 越大越稳)">轮盘阻尼:</label>
+                <input id="wheelDamping" type="number" step="0.01" value="0.25" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>长按(ms):</label>
+                <input id="wheelTriggerTime" type="number" value="0" placeholder="0" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>视角灵敏度:</label>
+                <input id="viewSensitivity" type="number" step="0.1" value="1.0" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="鼠标加速度 (0.0-1.0+)">视角加速度:</label>
+                <input id="viewAcceleration" type="number" step="0.1" value="0.0" class="small-input">
+            </div>
+            <div class="param-row">
+                <label title="视角静止自动抬起(ms), 0为禁用">自动抬起:</label>
+                <input id="viewAutoRelease" type="number" value="0" placeholder="0" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>视角绑左键:</label>
+                <input id="viewBindLMB" type="checkbox">
+            </div>
+            <div class="param-row">
+                <label>间隔(ms):</label>
+                <input id="sendInterval" type="number" value="8" class="small-input">
+            </div>
+            <div class="param-row">
+                <label>回报率(Hz):</label>
+                <input id="pollingRateInput" type="number" value="125" placeholder="125" class="small-input" title="设置此项后会自动计算间隔">
+            </div>
+            <p class="help-text" style="margin-top: 5px;">说明：设置回报率后，间隔将自动锁定。推荐 125Hz。</p>
+        </div>
+        <!-- 5. 设备激活 -->
+        <div id="source-activation">
+            <div id="deviceStatusPanel" style="padding: 5px; background: #f0f0f0; border-radius: 4px; margin-bottom: 10px;">
+                <div style="font-size: 12px; color: #666;">设备连接状态: <span id="connStatus" style="font-weight: bold;">检测中...</span></div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">MAC 地址: <span id="macAddr" style="font-family: monospace;">-</span></div>
+                <div style="font-size: 12px; color: #666; margin-top: 4px;">授权状态: <span id="authStatus">-</span></div>
+            </div>
+            <div class="param-row">
+                <label>激活码:</label>
+                <input id="licenseInput" type="text" placeholder="输入16位激活码" class="small-input" style="width: 140px;">
+            </div>
+            <p class="help-text">说明：请先运行发送端程序以获取设备信息。填入激活码后点击主面板的"保存配置"，发送端将自动尝试激活设备。</p>
+        </div>
+    </div>
+
+    <!-- 画布容器 (全屏) -->
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

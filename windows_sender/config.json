@@ -1,0 +1,121 @@
+{
+  "port": "COM7",
+  "rotation": 90,
+  "keyMap": {
+    "1": {
+      "x": 0.4418,
+      "y": 0.9182,
+      "radius": 0.05
+    },
+    "2": {
+      "x": 0.5246,
+      "y": 0.9148,
+      "radius": 0.0417
+    },
+    "3": {
+      "x": 0.59,
+      "y": 0.9148,
+      "radius": 0.0426
+    },
+    "B": {
+      "x": 0.5487,
+      "y": 0.8481,
+      "radius": 0.0231
+    },
+    "CONTROL": {
+      "x": 0.8417,
+      "y": 0.9278,
+      "radius": 0.0519
+    },
+    "LMB": {
+      "x": 0.0758,
+      "y": 0.4889,
+      "radius": 0.0833
+    },
+    "R": {
+      "x": 0.7754,
+      "y": 0.8231,
+      "radius": 0.0491
+    },
+    "RMB": {
+      "x": 0.9413,
+      "y": 0.5361,
+      "radius": 0.0361
+    },
+    "SPACE": {
+      "x": 0.9421,
+      "y": 0.6963,
+      "radius": 0.0454
+    },
+    "TAB": {
+      "x": 0.0537,
+      "y": 0.8981,
+      "radius": 0.0426
+    }
+  },
+  "toggleKey": "ALT",
+  "sendIntervalMs": 8,
+  "movementWheel": {
+    "center": {
+      "x": 0.2137,
+      "y": 0.7361
+    },
+    "radius": 0.1852,
+    "walkRadius": 0.0926,
+    "modifierKey": "CAPSLOCK",
+    "stiffness": 0.02,
+    "damping": 0.25
+  },
+  "mouseWheels": [
+    {
+      "key": "I",
+      "x": 0.2096,
+      "y": 0.1185,
+      "radius": 0.0241,
+      "triggerTime": 500
+    },
+    {
+      "key": "T",
+      "x": 0.2112,
+      "y": 0.2046,
+      "radius": 0.025,
+      "triggerTime": 500
+    },
+    {
+      "key": "5",
+      "x": 0.3458,
+      "y": 0.9074,
+      "radius": 0.0426,
+      "triggerTime": 500
+    }
+  ],
+  "viewArea": {
+    "center": {
+      "x": 0.6777,
+      "y": 0.2408
+    },
+    "width": 0.3137,
+    "height": 0.4454,
+    "anchored": true,
+    "button": "",
+    "sensitivity": 0.9,
+    "acceleration": 0.3,
+    "autoReleaseTimeMs": 200
+  },
+  "antiCheat": {
+    "microMoveDelayMs": 1000,
+    "microMoveRange": 0.02,
+    "microMoveSpeed": 0.2,
+    "randomOffsetRange": 0.005,
+    "driftHoldTimeMin": 200,
+    "driftHoldTimeMax": 1500,
+    "driftDurationMin": 50,
+    "driftDurationMax": 150
+  },
+  "uiReferenceWidth": 2400,
+  "uiReferenceHeight": 1080,
+  "overlayScale": 0.5,
+  "overlayKey": "F8",
+  "license": "C14B08D476EE0022",
+  "pollingRate": 125
+}

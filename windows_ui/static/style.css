@@ -1,0 +1,305 @@
+body { 
+    margin: 0; 
+    padding: 0; 
+    font-family: 'Segoe UI', Arial, sans-serif; 
+    background-color: #2c2c2c; /* 深色背景更适合游戏配置 */
+    width: 100vw; 
+    height: 100vh; 
+    overflow: hidden; 
+}
+
+/* 全屏画布容器 */
+#canvas-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+#canvas {
+    background: white;
+    box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    /* 核心逻辑：保持比例适应屏幕，但不超过屏幕 */
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* 悬浮工具栏 */
+.floating-panel {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    width: 300px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; /* 防止超出屏幕 */
+    transition: width 0.3s;
+}
+
+.panel-header {
+    padding: 12px 16px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+    border-radius: 8px 8px 0 0;
+    cursor: move; /* 拖拽手柄 */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    color: #333;
+    user-select: none;
+}
+
+.toggle-btn {
+    cursor: pointer;
+    padding: 4px 8px;
+    font-size: 16px;
+    color: #666;
+}
+.toggle-btn:hover { color: #000; }
+
+.panel-content {
+    overflow-y: auto;
+    padding: 10px;
+    flex: 1;
+}
+
+/* 隐藏面板内容时的样式 */
+.panel-collapsed .panel-content {
+    display: none;
+}
+.panel-collapsed {
+    width: 200px;
+    height: auto;
+}
+
+/* 模块列表按钮 */
+.module-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.module-btn {
+    padding: 12px;
+    text-align: left;
+    background: #f9f9f9;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 13px;
+    color: #444;
+    transition: all 0.2s;
+    position: relative;
+}
+.module-btn:hover {
+    background: #eef;
+    color: #2196F3;
+    border-color: #2196F3;
+    padding-left: 16px; /* Hover effect */
+}
+.module-btn::after {
+    content: '>';
+    position: absolute;
+    right: 12px;
+    color: #999;
+    font-weight: normal;
+}
+
+/* 子面板 */
+.floating-sub-panel {
+    position: fixed;
+    top: 20px;
+    left: 340px; /* Offset from main panel */
+    width: 320px;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(10px);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    z-index: 101;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.sub-header {
+    padding: 12px 16px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #ddd;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    color: #333;
+}
+
+.close-btn {
+    cursor: pointer;
+    font-size: 20px;
+    color: #999;
+    line-height: 1;
+}
+.close-btn:hover { color: #f44336; }
+
+.sub-content {
+    padding: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-height: 80vh;
+}
+
+/* 移除旧的折叠样式 */
+/* 折叠组件 (details/summary) */
+details {
+    margin-bottom: 8px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    background: #fff;
+}
+summary {
+    padding: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #444;
+    list-style: none; /* 移除默认箭头 */
+    background: #fafafa;
+    border-radius: 6px;
+    user-select: none;
+}
+summary:hover { background: #f0f0f0; }
+summary::-webkit-details-marker { display: none; }
+summary::after {
+    content: '+'; 
+    float: right;
+    font-weight: bold;
+}
+details[open] summary::after {
+    content: '-';
+}
+
+.details-content {
+    padding: 10px;
+    border-top: 1px solid #eee;
+}
+
+/* 按钮网格 */
+.btn-grid { 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 8px; 
+    margin-bottom: 8px; 
+}
+
+button { 
+    padding: 8px; 
+    border: 1px solid #ddd; 
+    background: #fff; 
+    cursor: pointer; 
+    border-radius: 4px; 
+    transition: all 0.2s; 
+    font-size: 12px; 
+    color: #333;
+}
+button:hover { 
+    background: #f5f5f5; 
+    border-color: #bbb; 
+}
+button:active { 
+    background: #e0e0e0; 
+}
+
+.full-btn { width: 100%; }
+.small-btn { padding: 4px 8px; font-size: 11px; }
+
+/* 底部操作区 */
+.footer-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+.action-btn {
+    flex: 1;
+    padding: 10px;
+    font-size: 13px;
+    font-weight: bold;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+}
+.primary { background: #2196F3; color: white; }
+.primary:hover { background: #1976D2; }
+.secondary { background: #f5f5f5; color: #333; border: 1px solid #ddd; }
+.secondary:hover { background: #e0e0e0; }
+
+/* 输入框和标签 */
+.info-row, .param-row { 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    margin-bottom: 8px; 
+    font-size: 12px; 
+}
+label { 
+    color: #666; 
+    flex: 1; 
+    white-space: nowrap; 
+    margin-right: 8px; 
+}
+.info-row span {
+    white-space: nowrap;
+    margin-right: 8px;
+}
+input[type="file"] {
+    max-width: 180px;
+    font-size: 11px;
+}
+.small-input { 
+    width: 60px; 
+    padding: 4px; 
+    border: 1px solid #ddd; 
+    border-radius: 4px; 
+    text-align: right;
+}
+.mini-select {
+    width: 60px;
+    padding: 2px;
+}
+.small-select {
+    width: 80px;
+    padding: 2px;
+}
+input[type="checkbox"] { margin: 0; }
+
+#status { 
+    margin-top: 8px; 
+    font-size: 11px; 
+    color: #666; 
+    text-align: center;
+    min-height: 16px;
+}
+
+.help-text {
+    font-size: 11px;
+    color: #666;
+    margin-top: 4px;
+    line-height: 1.4;
+}
