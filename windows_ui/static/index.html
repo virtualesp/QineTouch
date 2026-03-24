@@ -17,10 +17,14 @@
         <div class="panel-content" id="toolbarContent">
             <!-- 模块列表 (只显示标题，点击弹出子面板) -->
             <div class="module-list">
+                <button class="module-btn" onclick="openSubPanel('config_manage')">配置文件管理</button>
                 <button class="module-btn" onclick="openSubPanel('basic')">基础设置 & 截图</button>
                 <button class="module-btn" onclick="openSubPanel('components')">添加组件 (拖拽)</button>
                 <button class="module-btn" onclick="openSubPanel('scroll')">鼠标滚轮配置</button>
+                <button class="module-btn" onclick="openSubPanel('macro')">宏系统配置</button>
                 <button class="module-btn" onclick="openSubPanel('advanced')">高级参数微调</button>
+                <button class="module-btn" onclick="openSubPanel('vpointer')">vPointer 配置</button>
+                <button class="module-btn" onclick="openSubPanel('anticheat')">反作弊参数</button>
                 <button class="module-btn" onclick="openSubPanel('activation')">设备激活</button>
             </div>
 
@@ -45,6 +49,21 @@
 
     <!-- 隐藏的配置内容源 (DOM结构) -->
     <div id="configSources" style="display: none;">
+        <!-- 0. 配置文件管理 -->
+        <div id="source-config_manage">
+            <div class="info-row">
+                <label>当前配置:</label>
+                <span id="currentConfigName" style="font-weight: bold; color: #4CAF50;">loading...</span>
+            </div>
+            <div class="list-container" id="configList" style="max-height: 200px; overflow-y: auto; margin: 10px 0; border: 1px solid #ddd; padding: 5px;">
+                <!-- 配置列表由 JS 填充 -->
+            </div>
+            <div class="input-group" style="display: flex; gap: 5px; margin-top: 10px;">
+                <input id="newConfigName" type="text" placeholder="新配置名称" style="flex: 1;">
+                <button id="btnCreateConfig" class="action-btn small">新建</button>
+            </div>
+        </div>
+
         <!-- 1. 基础配置 -->
         <div id="source-basic">
             <div class="info-row">
@@ -67,7 +86,7 @@
             <div class="btn-grid">
                 <button id="btnAddMouseWheel">添加鼠标轮盘 (Tab/4...)</button>
             </div>
-            <p class="help-text">说明：若要使用中键进入鼠标轮盘模式，请点击上方按钮并按下中键(MMB)进行绑定。在此模式下，按下中键时鼠标会隐藏并锁定在组件中心，移动鼠标即可触发滑动。</p>
+            <p class="help-text">说明：短按点击长安进入轮盘。在此模式下，按下中键时鼠标会隐藏并锁定在组件中心，移动鼠标即可触发滑动。</p>
             <div class="btn-grid">
                 <button id="btnAddLMB">鼠标左键</button>
                 <button id="btnAddRMB">鼠标右键</button>
@@ -105,6 +124,68 @@
             </div>
         </div>
 
+        <!-- 3.5 宏系统配置 -->
+        <div id="source-macro">
+            <div class="list-container" id="macroList" style="max-height: 200px; overflow-y: auto; margin: 10px 0; border: 1px solid #ddd; padding: 5px;">
+                <!-- 宏列表 -->
+            </div>
+            <button id="btnAddMacro" class="action-btn small full-width" style="margin-bottom: 10px;">+ 添加宏</button>
+            
+            <div id="macroEditor" style="display: none; border-top: 1px solid #ccc; padding-top: 10px;">
+                <div class="param-row">
+                    <label>名称:</label>
+                    <input id="macroName" type="text" class="small-input" style="width: 120px;">
+                </div>
+                <div class="param-row">
+                    <label>触发键:</label>
+                    <input id="macroTriggerKey" type="number" class="small-input" placeholder="VK Code">
+                    <button id="btnGetMacroKey" class="small-btn">获取</button>
+                </div>
+                <div class="param-row">
+                    <label>模式:</label>
+                    <select id="macroMode" class="small-select">
+                        <option value="0">单次 (Once)</option>
+                        <option value="1">长按 (Hold)</option>
+                        <option value="2">切换 (Toggle)</option>
+                        <option value="3">序列 (Sequence)</option>
+                    </select>
+                </div>
+                
+                <label>动作列表:</label>
+                <div class="list-container" id="macroActionList" style="max-height: 150px; overflow-y: auto; margin: 5px 0; border: 1px solid #eee; background: #f9f9f9;">
+                    <!-- 动作列表 -->
+                </div>
+                
+                <div style="border: 1px dashed #ccc; padding: 5px; margin-top: 5px; background: #f0f0f0;">
+                    <div class="param-row">
+                        <label>类型:</label>
+                        <select id="newActionType" class="small-select">
+                            <option value="0">延迟 (Delay)</option>
+                            <option value="1">按下 (KeyDown)</option>
+                            <option value="2">抬起 (KeyUp)</option>
+                            <option value="3">点击 (KeyPress)</option>
+                            <option value="4">移动 (Move)</option>
+                            <option value="5">鼠标按下</option>
+                            <option value="6">鼠标抬起</option>
+                            <option value="7">鼠标点击</option>
+                            <option value="8">滚轮 (Scroll)</option>
+                        </select>
+                    </div>
+                    
+                    <div id="actionParams">
+                        <!-- 动态生成的参数输入框 -->
+                    </div>
+                    
+                    <button id="btnAddAction" class="action-btn small secondary full-width" style="margin-top: 5px;">添加动作</button>
+                </div>
+                
+                <div class="footer-actions" style="margin-top: 10px;">
+                    <button id="btnSaveMacro" class="action-btn primary small">保存修改</button>
+                    <button id="btnDeleteMacro" class="action-btn danger small">删除宏</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 4. 参数微调 -->
         <div id="source-advanced">
             <div class="param-row">
@@ -133,46 +214,6 @@
                 <input id="overlayScaleInput" type="number" step="0.1" value="1.0" class="small-input">
             </div>
             <div class="param-row">
-                <label title="WASD轮盘半径">WASD半径:</label>
-                <input id="wheelRadius" type="number" value="160" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="静步键">静步键:</label>
-                <input id="wheelModifierKey" type="text" placeholder="SHIFT" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="静步半径">静步半径:</label>
-                <input id="wheelWalkRadius" type="number" value="80" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="弹簧刚度 (默认0.015, 越大越快)">轮盘刚度:</label>
-                <input id="wheelStiffness" type="number" step="0.001" value="0.015" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="阻尼系数 (默认0.25, 越大越稳)">轮盘阻尼:</label>
-                <input id="wheelDamping" type="number" step="0.01" value="0.25" class="small-input">
-            </div>
-            <div class="param-row">
-                <label>长按(ms):</label>
-                <input id="wheelTriggerTime" type="number" value="0" placeholder="0" class="small-input">
-            </div>
-            <div class="param-row">
-                <label>视角灵敏度:</label>
-                <input id="viewSensitivity" type="number" step="0.1" value="1.0" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="鼠标加速度 (0.0-1.0+)">视角加速度:</label>
-                <input id="viewAcceleration" type="number" step="0.1" value="0.0" class="small-input">
-            </div>
-            <div class="param-row">
-                <label title="视角静止自动抬起(ms), 0为禁用">自动抬起:</label>
-                <input id="viewAutoRelease" type="number" value="0" placeholder="0" class="small-input">
-            </div>
-            <div class="param-row">
-                <label>视角绑左键:</label>
-                <input id="viewBindLMB" type="checkbox">
-            </div>
-            <div class="param-row">
                 <label>间隔(ms):</label>
                 <input id="sendInterval" type="number" value="8" class="small-input">
             </div>
@@ -180,7 +221,7 @@
                 <label>回报率(Hz):</label>
                 <input id="pollingRateInput" type="number" value="125" placeholder="125" class="small-input" title="设置此项后会自动计算间隔">
             </div>
-            <p class="help-text" style="margin-top: 5px;">说明：设置回报率后，间隔将自动锁定。推荐 125Hz。</p>
+            <p class="help-text" style="margin-top: 5px;">说明：为程序每秒处理映射的次数。</p>
         </div>
         <!-- 5. 设备激活 -->
         <div id="source-activation">
@@ -193,7 +234,86 @@
                 <label>激活码:</label>
                 <input id="licenseInput" type="text" placeholder="输入16位激活码" class="small-input" style="width: 140px;">
             </div>
-            <p class="help-text">说明：请先运行发送端程序以获取设备信息。填入激活码后点击主面板的"保存配置"，发送端将自动尝试激活设备。</p>
+            <p class="help-text">说明：请先运行发送端程序以获取设备信息。填入激活码后点击主面板的"保存配置"，发送端将自动尝试激活设备。3.3之后的固件不需要理会此处.</p>
+        </div>
+
+        <!-- 6. vPointer 配置 -->
+        <div id="source-vpointer">
+            <div class="param-row">
+                <label>启用:</label>
+                <input id="enableVPointer" type="checkbox">
+            </div>
+            <div class="param-row">
+                <label>IP:</label>
+                <input id="vPointerIp" type="text" class="small-input" value="192.168.1.100" style="width: 120px;">
+            </div>
+            <div class="param-row">
+                <label>端口:</label>
+                <input id="vPointerPort" type="number" class="small-input" value="6533">
+            </div>
+            <div class="param-row">
+                <label>旋转:</label>
+                <select id="vPointerRotation" class="small-select">
+                    <option value="0">0°</option>
+                    <option value="90">90°</option>
+                    <option value="180">180°</option>
+                    <option value="270">270°</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 7. 反作弊配置 (New) -->
+        <div id="source-anticheat">
+            <h4 style="margin: 5px 0; border-bottom: 1px solid #ccc;">反作弊参数</h4>
+            <div class="param-row">
+                <label title="点击/按键时的初始随机坐标偏移范围 (归一化 0.0-1.0)。值越大，点击位置越分散。">点击随机偏移:</label>
+                <input id="acRandomOffset" type="number" step="0.001" value="0.005" class="small-input" title="推荐值: 0.005">
+            </div>
+            <div class="param-row">
+                <label title="WASD按下时的初始方向随机偏转角度 (弧度)。0.35rad ≈ 20度。值越大，初始方向越不稳定。">初始角度随机:</label>
+                <input id="acInitAngle" type="number" step="0.01" value="0.35" class="small-input" title="推荐值: 0.35">
+            </div>
+            <div class="param-row">
+                <label title="WASD按下时的初始力度(半径)随机缩放比例。0.1 表示 +/- 5%。值越大，初始速度越不稳定。">初始半径随机:</label>
+                <input id="acInitScale" type="number" step="0.01" value="0.1" class="small-input" title="推荐值: 0.1">
+            </div>
+            <div class="param-row">
+                <label title="微动噪声的变化速度，值越大抖动越快。">微动速度:</label>
+                <input id="acMicroSpeed" type="number" step="0.01" value="0.05" class="small-input" title="推荐值: 0.05">
+            </div>
+            <div class="param-row">
+                <label title="微动产生的最大偏移距离 (归一化)。值越大，漂移越明显。">微动幅度:</label>
+                <input id="acMicroRange" type="number" step="0.001" value="0.008" class="small-input" title="推荐值: 0.008">
+            </div>
+            <div class="param-row">
+                <label title="保持按键多久后开始触发微动 (毫秒)。">微动延迟:</label>
+                <input id="acMicroDelay" type="number" value="1000" class="small-input" title="推荐值: 1000">
+            </div>
+        </div>
+
+        <!-- 隐藏的组件属性输入框 (供保存/读取使用，实际由属性面板展示) -->
+        <div id="source-hidden" style="display:none;">
+            <input id="wheelRadius" type="number" value="160">
+            <input id="wheelModifierKey" type="text" value="">
+            <input id="wheelWalkRadius" type="number" value="80">
+            <input id="wheelStiffness" type="number" step="0.001" value="0.015">
+            <input id="wheelDamping" type="number" step="0.01" value="0.25">
+            <input id="wheelTriggerTime" type="number" value="0">
+            <input id="viewSensitivity" type="number" step="0.1" value="1.0">
+            <input id="viewAcceleration" type="number" step="0.1" value="0.0">
+            <input id="viewAutoRelease" type="number" value="0">
+            <input id="viewBindLMB" type="checkbox">
+        </div>
+    </div>
+
+    <!-- 组件属性面板 (选中画布组件时显示) -->
+    <div id="propPanel">
+        <div class="prop-header" id="propPanelHeader">
+            <span id="propPanelTitle">组件属性</span>
+            <span class="close-btn" onclick="hidePropPanel()" title="关闭">×</span>
+        </div>
+        <div class="prop-content" id="propPanelContent">
+            <!-- 内容由 JS 动态填充 -->
         </div>
     </div>
 
@@ -201,7 +321,16 @@
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
     </div>
+    <div id="canvasHint"></div>
 
     <script src="/static/app.js"></script>
+    <script>
+      // Load macro_logic.js dynamically after app.js to ensure variables are available
+      // The issue was duplicate 'const' declaration in macro_logic.js which is already in app.js if they share scope.
+      // We removed duplicate declarations in macro_logic.js.
+      // But we also need to ensure app.js runs first.
+      // Simply including the script tag here should work as scripts are executed in order.
+    </script>
+    <script src="/static/macro_logic.js"></script>
   </body>
 </html>

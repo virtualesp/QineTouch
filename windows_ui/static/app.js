@@ -5,7 +5,7 @@ const targetWInput = document.getElementById('targetW');
 const targetHInput = document.getElementById('targetH');
 const statusDiv = document.getElementById('status');
 
-// 输入控件
+// Inputs
 const portInput = document.getElementById('portInput');
 const rotationInput = document.getElementById('rotationInput');
 const toggleKeyInput = document.getElementById('toggleKeyInput');
@@ -25,20 +25,34 @@ const wheelWalkRadius = document.getElementById('wheelWalkRadius');
 const wheelStiffness = document.getElementById('wheelStiffness');
 const wheelDamping = document.getElementById('wheelDamping');
 
-// 滚动配置
+// Scroll Config
 const scrollUpMode = document.getElementById('scrollUpMode');
 const btnSetScrollUp = document.getElementById('btnSetScrollUp');
 const scrollDownMode = document.getElementById('scrollDownMode');
 const btnSetScrollDown = document.getElementById('btnSetScrollDown');
 const scrollDuration = document.getElementById('scrollDuration');
 
-// 激活状态
+// Macro Config
+const macroListDiv = document.getElementById('macroList');
+const btnAddMacro = document.getElementById('btnAddMacro');
+const macroEditor = document.getElementById('macroEditor');
+const macroNameInput = document.getElementById('macroName');
+const macroTriggerKeyInput = document.getElementById('macroTriggerKey');
+const btnGetMacroKey = document.getElementById('btnGetMacroKey');
+const macroModeSelect = document.getElementById('macroMode');
+const macroActionListDiv = document.getElementById('macroActionList');
+const newActionTypeSelect = document.getElementById('newActionType');
+const btnAddAction = document.getElementById('btnAddAction');
+const btnSaveMacro = document.getElementById('btnSaveMacro');
+const btnDeleteMacro = document.getElementById('btnDeleteMacro');
+
+// Activation
 const licenseInput = document.getElementById('licenseInput');
 const connStatus = document.getElementById('connStatus');
 const macAddr = document.getElementById('macAddr');
 const authStatus = document.getElementById('authStatus');
 
-// 按钮
+// Buttons
 const btnAddWheel = document.getElementById('btnAddWheel');
 const btnAddMouseWheel = document.getElementById('btnAddMouseWheel');
 const btnAddView = document.getElementById('btnAddView');
@@ -50,7 +64,13 @@ const btnAddCustom = document.getElementById('btnAddCustom');
 const saveBtn = document.getElementById('saveBtn');
 const loadBtn = document.getElementById('loadBtn');
 
-// 状态变量
+// Config Management
+const configListDiv = document.getElementById('configList');
+const currentConfigNameSpan = document.getElementById('currentConfigName');
+const newConfigNameInput = document.getElementById('newConfigName');
+const btnCreateConfig = document.getElementById('btnCreateConfig');
+
+// State
 let bgImg = null;
 const DEFAULT_KEY_RADIUS = 25;
 const DEFAULT_VIEW_W = 300;
@@ -64,29 +84,220 @@ let mouseWheels = []; // Array of { key, x, y, radius }
 let viewCenter = null; // {x, y, width, height}
 let scrollUpConfig = { mode: 'none' };
 let scrollDownConfig = { mode: 'none' };
+let macros = []; // Array of MacroConfig
+let currentMacroIndex = -1;
 
 let selected = null; // { type: 'key'|'wheel'|'view'|'mouseWheel', id: string|null|index }
 let interaction = null; // { type: 'drag'|'resize', startX, startY, origProps, handle? }
 let pendingKeyName = null;
-let pendingScrollSet = null; // { type: 'scrollUp'|'scrollDown', step: 0 } 
+let pendingScrollSet = null; // { type: 'scrollUp'|'scrollDown', step: 0 }
 
-// 初始化
-/**
- * 初始化画布和应用状态
- */
+// Unsaved changes tracking
+let isDirty = false;
+function markDirty() {
+    if (isDirty) return;
+    isDirty = true;
+    saveBtn.style.background = '#e65100';
+    saveBtn.style.boxShadow = '0 0 0 2px #ff9800';
+    saveBtn.title = '有未保存的修改，请点击保存';
+}
+function clearDirty() {
+    isDirty = false;
+    saveBtn.style.background = '';
+    saveBtn.style.boxShadow = '';
+    saveBtn.title = '';
+}
+window.addEventListener('beforeunload', (e) => {
+    if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+// Status message with auto-clear
+let statusClearTimer = null;
+function setStatus(msg, color, autoClearMs) {
+    statusDiv.innerText = msg;
+    statusDiv.style.color = color || '';
+    if (statusClearTimer) clearTimeout(statusClearTimer);
+    if (autoClearMs) {
+        statusClearTimer = setTimeout(() => {
+            statusDiv.innerText = '';
+            statusDiv.style.color = '';
+        }, autoClearMs);
+    }
+}
+
+// Canvas hint bar
+const canvasHintEl = document.getElementById('canvasHint');
+let canvasHintTimer = null;
+function showCanvasHint(msg, persistent) {
+    canvasHintEl.textContent = msg;
+    canvasHintEl.classList.add('visible');
+    if (canvasHintTimer) clearTimeout(canvasHintTimer);
+    if (!persistent) {
+        canvasHintTimer = setTimeout(() => canvasHintEl.classList.remove('visible'), 3000);
+    }
+}
+function hideCanvasHint() {
+    if (canvasHintTimer) clearTimeout(canvasHintTimer);
+    canvasHintEl.classList.remove('visible');
+}
+
+// ESC to deselect / cancel pending
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        if (pendingKeyName || pendingScrollSet) {
+            pendingKeyName = null;
+            pendingScrollSet = null;
+            canvas.classList.remove('pending');
+            hideCanvasHint();
+            setStatus('已取消', '#888', 1500);
+            draw();
+        } else if (selected) {
+            selected = null;
+            interaction = null;
+            hidePropPanel();
+            hideCanvasHint();
+            draw();
+        }
+    }
+}, { capture: false });
+
+// Initialize
 function init() {
     canvas.width = 1080;
     canvas.height = 2400;
-    ctx.font = 'bold 48px Arial'; // 增大字体大小
+    ctx.font = 'bold 48px Arial'; // Increased font size
     draw();
+    
+    // 加载配置文件列表
+    loadConfigList();
 }
 
-// 工具栏逻辑
+// Config Management Logic
+async function loadConfigList() {
+    try {
+        const res = await fetch('/config/list');
+        const list = await res.json();
+        
+        configListDiv.innerHTML = '';
+        list.forEach(cfg => {
+            const item = document.createElement('div');
+            item.className = 'config-item';
+            item.style.display = 'flex';
+            item.style.justifyContent = 'space-between';
+            item.style.alignItems = 'center';
+            item.style.padding = '5px';
+            item.style.borderBottom = '1px solid #eee';
+            
+            if (cfg.isCurrent) {
+                item.style.backgroundColor = '#e8f5e9';
+                currentConfigNameSpan.textContent = cfg.filename;
+            }
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = cfg.filename;
+            nameSpan.style.cursor = 'pointer';
+            nameSpan.style.flex = '1';
+            nameSpan.onclick = () => switchConfig(cfg.filename);
+            
+            item.appendChild(nameSpan);
+            
+            // 删除按钮 (不能删除当前和默认)
+            if (cfg.filename !== 'config.json' && !cfg.isCurrent) {
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '×';
+                delBtn.className = 'action-btn small danger';
+                delBtn.style.padding = '0 5px';
+                delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if(confirm(`确认删除 ${cfg.filename}?`)) {
+                        deleteConfig(cfg.filename);
+                    }
+                };
+                item.appendChild(delBtn);
+            }
+            
+            configListDiv.appendChild(item);
+        });
+    } catch (e) {
+        console.error('Failed to load config list', e);
+        setStatus('无法加载配置列表，请确认发送端程序正在运行', 'red');
+    }
+}
+
+async function switchConfig(filename) {
+    if (confirm(`确认切换到配置 ${filename}? 服务将自动重启。`)) {
+        try {
+            const res = await fetch('/config/switch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({filename: filename})
+            });
+            const result = await res.json();
+            if (result.ok) {
+                setStatus(`已切换到 ${filename}，正在重启...`, 'green');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                setStatus('切换配置失败', 'red');
+            }
+        } catch (e) {
+            setStatus('切换失败：无法连接到发送端程序', 'red');
+        }
+    }
+}
+
+async function createConfig() {
+    const name = newConfigNameInput.value.trim();
+    if (!name) return;
+    
+    try {
+        const res = await fetch('/config/create', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: name})
+        });
+        const result = await res.json();
+        if (result.ok) {
+            newConfigNameInput.value = '';
+            setStatus('创建成功', 'green', 2000);
+            loadConfigList();
+        } else {
+            setStatus('创建失败，配置文件可能已存在', 'red');
+        }
+    } catch (e) {
+        setStatus('创建失败：无法连接到发送端程序', 'red');
+    }
+}
+
+async function deleteConfig(filename) {
+    try {
+        const res = await fetch('/config/delete', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({filename: filename})
+        });
+        const result = await res.json();
+        if (result.ok) {
+            setStatus('删除成功', 'green', 2000);
+            loadConfigList();
+        } else {
+            setStatus('删除失败', 'red');
+        }
+    } catch (e) {
+        setStatus('删除失败：无法连接到发送端程序', 'red');
+    }
+}
+
+btnCreateConfig.addEventListener('click', createConfig);
+
+// Toolbar Logic
 const toolbar = document.getElementById('toolbar');
 const toolbarHeader = document.getElementById('toolbarHeader');
 const toolbarToggle = document.getElementById('toolbarToggle');
 
-// 拖拽逻辑
+// Dragging
 let isToolbarDragging = false;
 let toolbarDragOffsetX = 0;
 let toolbarDragOffsetY = 0;
@@ -104,7 +315,7 @@ document.addEventListener('mousemove', (e) => {
         let newLeft = e.clientX - toolbarDragOffsetX;
         let newTop = e.clientY - toolbarDragOffsetY;
         
-        // 简单边界检查
+        // Simple boundaries
         const maxLeft = window.innerWidth - 50;
         const maxTop = window.innerHeight - 50;
         
@@ -125,33 +336,33 @@ document.addEventListener('mouseup', () => {
     }
 });
 
-// 折叠切换
+// Toggle Collapse
 toolbarToggle.addEventListener('click', (e) => {
     e.stopPropagation();
     toolbar.classList.toggle('panel-collapsed');
     toolbarToggle.innerText = toolbar.classList.contains('panel-collapsed') ? '+' : '−';
 });
 
-// 子面板逻辑
+// Sub Panel Logic
 const subPanel = document.getElementById('subPanel');
 const subPanelTitle = document.getElementById('subPanelTitle');
 const subPanelContent = document.getElementById('subPanelContent');
 let currentSource = null;
 
-/**
- * 打开指定模块的子面板
- * @param {string} moduleId - 模块ID
- */
 function openSubPanel(moduleId) {
     const titles = {
+        'config_manage': '配置文件管理',
         'basic': '基础设置 & 截图',
-        'components': '添加组件 (拖拽)',
+        'components': '添加组件',
         'scroll': '鼠标滚轮配置',
-        'advanced': '高级参数微调',
+        'macro': '宏系统配置',
+        'advanced': '高级参数',
+        'vpointer': 'vPointer 配置',
+        'anticheat': '反作弊参数',
         'activation': '设备激活 & 状态'
     };
     
-    // 1. 如果有当前内容，先移回原处
+    // 1. Move current content back to source if any
     if (currentSource) {
         const sourceDiv = document.getElementById('source-' + currentSource);
         if (sourceDiv) {
@@ -161,13 +372,13 @@ function openSubPanel(moduleId) {
         }
     }
 
-    // 2. 如果点击的是同一个模块，则关闭
+    // 2. If clicking same module, just close it
     if (currentSource === moduleId && subPanel.style.display !== 'none') {
         closeSubPanel();
         return;
     }
 
-    // 3. 将新内容移动到子面板
+    // 3. Move new content to subPanel
     const newSourceDiv = document.getElementById('source-' + moduleId);
     if (newSourceDiv) {
         while (newSourceDiv.firstChild) {
@@ -175,20 +386,17 @@ function openSubPanel(moduleId) {
         }
     }
 
-    // 4. 更新 UI
+    // 4. Update UI
     subPanelTitle.innerText = titles[moduleId] || '配置';
     subPanel.style.display = 'flex';
     currentSource = moduleId;
 
-    // 将子面板定位在工具栏旁边
+    // Position subPanel next to toolbar
     const rect = toolbar.getBoundingClientRect();
     subPanel.style.left = (rect.right + 10) + 'px';
     subPanel.style.top = rect.top + 'px';
 }
 
-/**
- * 关闭子面板
- */
 function closeSubPanel() {
     if (currentSource) {
         const sourceDiv = document.getElementById('source-' + currentSource);
@@ -202,7 +410,7 @@ function closeSubPanel() {
     currentSource = null;
 }
 
-// 使子面板也可拖拽
+// Make SubPanel Draggable too
 const subHeader = document.querySelector('.sub-header');
 let isSubDragging = false;
 let subDragOffsetX = 0;
@@ -229,12 +437,12 @@ document.addEventListener('mouseup', () => {
 });
 
 /**
- * 绘制所有内容
+ * Draw everything
  */
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 背景
+    // Background
     if (bgImg) {
         ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
     } else {
@@ -243,42 +451,42 @@ function draw() {
         ctx.fillStyle = '#999';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 60px Arial'; // 增大提示文字
+        ctx.font = 'bold 60px Arial'; // Larger hint text
         ctx.fillText('请上传游戏截图以开始配置', canvas.width/2, canvas.height/2);
     }
 
-    // 绘制方向轮盘
+    // Draw Wheel
     if (wheelCenter) {
         drawCircleComponent(wheelCenter.x, wheelCenter.y, wheelCenter.radius, 'WASD', 'rgba(255, 165, 0, 0.8)', 'rgba(255, 165, 0, 0.4)');
     }
 
-    // 绘制鼠标滚轮
+    // Draw MouseWheels
     mouseWheels.forEach((mw, idx) => {
         drawCircleComponent(mw.x, mw.y, mw.radius, 'MW:' + mw.key, 'rgba(153, 50, 204, 0.8)', 'rgba(153, 50, 204, 0.4)');
     });
 
-    // 绘制视角区域
+    // Draw View (Rect)
     if (viewCenter) {
         drawRectComponent(viewCenter.x, viewCenter.y, viewCenter.width, viewCenter.height, 'VIEW', 'rgba(0, 255, 127, 0.8)', 'rgba(0, 255, 127, 0.4)');
     }
 
-    // 绘制滚动动作
+    // Draw Scroll Actions
     const drawScroll = (cfg, label) => {
         if (cfg.mode === 'tap') {
             drawCircleComponent(cfg.x, cfg.y, 40, label + '(Tap)', 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.2)');
         } else if (cfg.mode === 'swipe') {
-            // 绘制起点
+            // Draw Start
             drawCircleComponent(cfg.startX, cfg.startY, 30, label + ' S', 'rgba(0, 200, 255, 0.8)', 'rgba(0, 200, 255, 0.4)');
-            // 绘制终点
+            // Draw End
             drawCircleComponent(cfg.endX, cfg.endY, 30, label + ' E', 'rgba(0, 200, 255, 0.8)', 'rgba(0, 200, 255, 0.4)');
-            // 绘制箭头
+            // Draw Arrow
             ctx.beginPath();
             ctx.moveTo(cfg.startX, cfg.startY);
             ctx.lineTo(cfg.endX, cfg.endY);
             ctx.strokeStyle = 'rgba(0, 200, 255, 0.8)';
             ctx.lineWidth = 8;
             ctx.stroke();
-            // 箭头头部
+            // Arrow head
             const angle = Math.atan2(cfg.endY - cfg.startY, cfg.endX - cfg.startX);
             const headLen = 25;
             ctx.beginPath();
@@ -292,7 +500,7 @@ function draw() {
     if (scrollUpConfig.mode !== 'none') drawScroll(scrollUpConfig, 'UP');
     if (scrollDownConfig.mode !== 'none') drawScroll(scrollDownConfig, 'DOWN');
 
-    // 绘制按键
+    // Draw Keys
     Object.entries(keyMap).forEach(([key, pos]) => {
         let color = '#007bff';
         if (['LMB', 'RMB', 'X1', 'X2'].includes(key)) color = '#e91e63';
@@ -300,18 +508,12 @@ function draw() {
         drawCircleComponent(pos.x, pos.y, pos.radius, key, color, fillColor);
     });
 
-    // 绘制选中项（手柄和删除按钮）
+    // Draw Selection (Handles & Delete)
     if (selected) {
         drawSelectionOverlay();
     }
 }
 
-/**
- * 将十六进制颜色转换为 RGBA 格式
- * @param {string} hex - 十六进制颜色值
- * @param {number} alpha - 透明度 (0-1)
- * @returns {string} RGBA 颜色字符串
- */
 function hexToRgba(hex, alpha) {
     hex = hex.replace('#', '');
     if (hex.length === 3) hex = hex.split('').map(c => c+c).join('');
@@ -321,29 +523,20 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * 绘制圆形组件
- * @param {number} x - 圆心 X 坐标
- * @param {number} y - 圆心 Y 坐标
- * @param {number} r - 半径
- * @param {string} label - 标签文本
- * @param {string} strokeColor - 描边颜色
- * @param {string} fillColor - 填充颜色
- */
 function drawCircleComponent(x, y, r, label, strokeColor, fillColor) {
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = fillColor;
     ctx.fill();
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 5; // 加粗线条
+    ctx.lineWidth = 5; // Thicker lines
     ctx.stroke();
 
-    // 标签
+    // Label
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    // 根据半径动态调整字体大小，最小 24px
+    // Dynamic font size based on radius, but minimum 24px
     ctx.font = 'bold ' + Math.max(24, r/1.5) + 'px Arial';
     ctx.fillText(label, x, y);
     ctx.strokeStyle = 'black';
@@ -351,16 +544,6 @@ function drawCircleComponent(x, y, r, label, strokeColor, fillColor) {
     ctx.strokeText(label, x, y);
 }
 
-/**
- * 绘制矩形组件
- * @param {number} x - 中心 X 坐标
- * @param {number} y - 中心 Y 坐标
- * @param {number} w - 宽度
- * @param {number} h - 高度
- * @param {string} label - 标签文本
- * @param {string} strokeColor - 描边颜色
- * @param {string} fillColor - 填充颜色
- */
 function drawRectComponent(x, y, w, h, label, strokeColor, fillColor) {
     const left = x - w/2;
     const top = y - h/2;
@@ -370,7 +553,7 @@ function drawRectComponent(x, y, w, h, label, strokeColor, fillColor) {
     ctx.lineWidth = 3;
     ctx.strokeRect(left, top, w, h);
 
-    // 标签
+    // Label
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -381,21 +564,18 @@ function drawRectComponent(x, y, w, h, label, strokeColor, fillColor) {
     ctx.strokeText(label, x, y);
 }
 
-/**
- * 绘制选中项的覆盖层（边界框、手柄、删除按钮）
- */
 function drawSelectionOverlay() {
     let bounds = getBounds(selected);
     if (!bounds) return;
 
-    // 绘制边界框 (用于视觉清晰)
+    // Draw Bounding Box (for visual clarity)
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 1;
     ctx.setLineDash([5, 5]);
     ctx.strokeRect(bounds.x, bounds.y, bounds.w, bounds.h);
     ctx.setLineDash([]);
 
-    // 绘制调整手柄 (角点)
+    // Draw Resize Handles (Corners)
     const handles = getHandles(selected);
     ctx.fillStyle = 'white';
     ctx.strokeStyle = 'black';
@@ -407,7 +587,7 @@ function drawSelectionOverlay() {
         ctx.stroke();
     });
 
-    // 绘制删除按钮 (右上角)
+    // Draw Delete Button (Top-Right)
     const delX = bounds.x + bounds.w;
     const delY = bounds.y;
     ctx.beginPath();
@@ -418,7 +598,7 @@ function drawSelectionOverlay() {
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // X 图标
+    // X icon
     ctx.beginPath();
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 2;
@@ -429,11 +609,6 @@ function drawSelectionOverlay() {
     ctx.stroke();
 }
 
-/**
- * 获取选中项的边界框
- * @param {object} sel - 选中项对象
- * @returns {object|null} 边界框 {x, y, w, h} 或 null
- */
 function getBounds(sel) {
     if (sel.type === 'key') {
         const item = keyMap[sel.id];
@@ -453,15 +628,10 @@ function getBounds(sel) {
     return null;
 }
 
-/**
- * 获取选中项的调整手柄位置
- * @param {object} sel - 选中项对象
- * @returns {Array} 手柄数组 [{name, x, y}, ...]
- */
 function getHandles(sel) {
     const b = getBounds(sel);
     if (!b) return [];
-    // 4个角
+    // 4 Corners
     return [
         { name: 'tl', x: b.x, y: b.y },
         { name: 'tr', x: b.x + b.w, y: b.y },
@@ -470,15 +640,9 @@ function getHandles(sel) {
     ];
 }
 
-// 辅助函数：检测命中
-/**
- * 检测鼠标点击位置命中了哪个元素
- * @param {number} x - 鼠标 X 坐标
- * @param {number} y - 鼠标 Y 坐标
- * @returns {object|null} 命中信息对象 或 null
- */
+// Helper: Check hit
 function checkHit(x, y) {
-    // 1. 检查选中项的删除按钮
+    // 1. Check Delete Button of Selected
     if (selected) {
         const b = getBounds(selected);
         if (b) {
@@ -488,7 +652,7 @@ function checkHit(x, y) {
                 return { type: 'delete' };
             }
         }
-        // 2. 检查手柄
+        // 2. Check Handles
         const handles = getHandles(selected);
         for (const h of handles) {
             if (Math.hypot(x - h.x, y - h.y) <= HANDLE_SIZE) {
@@ -497,28 +661,28 @@ function checkHit(x, y) {
         }
     }
 
-    // 3. 检查项目（按键、轮盘、视角）
-    // 逆序检查以选中最上层的元素
-    // 按键
+    // 3. Check Items (Keys, Wheel, View)
+    // Reverse order to pick top-most
+    // Keys
     for (const [key, pos] of Object.entries(keyMap)) {
         if (Math.hypot(x - pos.x, y - pos.y) <= pos.radius) {
             return { type: 'select', targetType: 'key', id: key };
         }
     }
-    // 轮盘
+    // Wheel
     if (wheelCenter) {
         if (Math.hypot(x - wheelCenter.x, y - wheelCenter.y) <= wheelCenter.radius) {
             return { type: 'select', targetType: 'wheel', id: 'wheel' };
         }
     }
-    // 鼠标滚轮
+    // MouseWheels
     for (let i = 0; i < mouseWheels.length; i++) {
         const mw = mouseWheels[i];
         if (Math.hypot(x - mw.x, y - mw.y) <= mw.radius) {
             return { type: 'select', targetType: 'mouseWheel', id: i };
         }
     }
-    // 视角
+    // View
     if (viewCenter) {
         const left = viewCenter.x - viewCenter.width/2;
         const top = viewCenter.y - viewCenter.height/2;
@@ -530,7 +694,7 @@ function checkHit(x, y) {
     return null;
 }
 
-// 交互逻辑
+// Interaction
 canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -541,7 +705,10 @@ canvas.addEventListener('mousedown', (e) => {
     if (pendingKeyName) {
         keyMap[pendingKeyName] = { x: Math.round(x), y: Math.round(y), radius: DEFAULT_KEY_RADIUS };
         pendingKeyName = null;
-        statusDiv.innerText = '按键已添加';
+        canvas.classList.remove('pending');
+        hideCanvasHint();
+        setStatus('按键已添加', '#4caf50', 2000);
+        markDirty();
         draw();
         return;
     }
@@ -555,18 +722,25 @@ canvas.addEventListener('mousedown', (e) => {
             cfg.x = Math.round(x);
             cfg.y = Math.round(y);
             pendingScrollSet = null;
-            statusDiv.innerText = '滚轮点击位置已设置';
+            canvas.classList.remove('pending');
+            hideCanvasHint();
+            setStatus('滚轮点击位置已设置', '#4caf50', 2000);
+            markDirty();
         } else if (mode === 'swipe') {
             if (pendingScrollSet.step === 0) {
                 cfg.startX = Math.round(x);
                 cfg.startY = Math.round(y);
                 pendingScrollSet.step = 1;
-                statusDiv.innerText = '已设置起始点，请点击设置结束点';
+                showCanvasHint('请点击设置滑动终点 | ESC 取消', true);
+                setStatus('已设置起始点，请点击设置结束点', 'blue');
             } else {
                 cfg.endX = Math.round(x);
                 cfg.endY = Math.round(y);
                 pendingScrollSet = null;
-                statusDiv.innerText = '滚轮滑动区域已设置';
+                canvas.classList.remove('pending');
+                hideCanvasHint();
+                setStatus('滚轮滑动区域已设置', '#4caf50', 2000);
+                markDirty();
             }
         }
         draw();
@@ -582,6 +756,8 @@ canvas.addEventListener('mousedown', (e) => {
             else if (selected.type === 'mouseWheel') mouseWheels.splice(selected.id, 1);
             else if (selected.type === 'view') viewCenter = null;
             selected = null;
+            markDirty();
+            hidePropPanel();
             draw();
             return;
         }
@@ -596,8 +772,8 @@ canvas.addEventListener('mousedown', (e) => {
         }
         if (hit.type === 'select') {
             selected = { type: hit.targetType, id: hit.id };
-            
-            // 根据选中项更新输入框
+
+            // Update inputs based on selection
             if (selected.type === 'wheel') {
                 wheelRadiusInput.value = Math.round(wheelCenter.radius);
             } else if (selected.type === 'mouseWheel') {
@@ -614,11 +790,14 @@ canvas.addEventListener('mousedown', (e) => {
             else if (selected.type === 'mouseWheel') props = {...mouseWheels[selected.id]};
             else if (selected.type === 'view') props = {...viewCenter};
             interaction = { type: 'drag', startX: x, startY: y, origProps: props };
+            showPropPanel(selected.type);
+            showCanvasHint('拖动移动 | 滚轮调整大小 | 角点拖拽缩放 | ESC 取消选中');
             draw();
             return;
         }
     } else {
         selected = null;
+        hidePropPanel();
         draw();
     }
 });
@@ -630,7 +809,7 @@ canvas.addEventListener('mousemove', (e) => {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // 鼠标指针样式
+    // Cursor
     const hit = checkHit(x, y);
     if (interaction) {
         canvas.style.cursor = interaction.type === 'drag' ? 'grabbing' : 'nwse-resize';
@@ -665,30 +844,46 @@ canvas.addEventListener('mousemove', (e) => {
             viewCenter.y = orig.y + dy;
         }
     } else if (interaction.type === 'resize') {
-        // 处理调整大小
-        // 对于圆形（按键/轮盘）：根据距中心的距离调整半径
+        // Handle Resize
+        // For Circle (Key/Wheel): Resize radius based on distance from center
         if (selected.type === 'key' || selected.type === 'wheel' || selected.type === 'mouseWheel') {
-            // 简单逻辑：鼠标到中心的距离
+            // Simple logic: distance from center
+            // Or bounding box logic.
+            // Let's use bounding box logic (corner drag)
+            // If dragging BR corner, radius = dist(center, mouse)
+            // But dragging TL corner? 
+            // Better: calculate new radius based on handle movement.
+            // If handle is BR, radius change = (dx + dy)/2 roughly?
+            // Let's just use distance from center to mouse position as new radius.
+            // This is intuitive.
             
-            let center = { x: orig.x, y: orig.y };
+            let center = { x: orig.x, y: orig.y }; // Center doesn't move for circle resize usually?
+            // But if I drag corner of bounding box, center might shift in some apps.
+            // Here let's keep center fixed and just adjust radius.
             let newR = Math.hypot(x - center.x, y - center.y);
             if (newR < 10) newR = 10;
             
-            if (selected.type === 'key') keyMap[selected.id].radius = newR;
-            else if (selected.type === 'wheel') {
+            if (selected.type === 'key') {
+                keyMap[selected.id].radius = newR;
+                wheelRadiusInput.value = Math.round(newR);
+            } else if (selected.type === 'wheel') {
                 wheelCenter.radius = newR;
                 wheelRadiusInput.value = Math.round(newR);
             } else if (selected.type === 'mouseWheel') {
                 mouseWheels[selected.id].radius = newR;
+                wheelRadiusInput.value = Math.round(newR);
             }
+            syncPropPanelRadius();
         } else if (selected.type === 'view') {
-            // 矩形调整大小
+            // Rect Resize
+            // This is trickier. Need to update x, y (center) and width, height.
             let newX = orig.x;
             let newY = orig.y;
             let newW = orig.width;
             let newH = orig.height;
 
-            // 原始边界
+            // Calculate new bounds based on handle
+            // Original bounds
             let left = orig.x - orig.width/2;
             let top = orig.y - orig.height/2;
             let right = orig.x + orig.width/2;
@@ -699,7 +894,7 @@ canvas.addEventListener('mousemove', (e) => {
             if (interaction.handle.includes('t')) top += dy;
             if (interaction.handle.includes('b')) bottom += dy;
 
-            // 归一化
+            // Normalize
             if (left > right) { let t = left; left = right; right = t; }
             if (top > bottom) { let t = top; top = bottom; bottom = t; }
 
@@ -717,19 +912,29 @@ canvas.addEventListener('mousemove', (e) => {
     draw();
 });
 
-canvas.addEventListener('mouseup', () => interaction = null);
+canvas.addEventListener('mouseup', () => { if (interaction) { markDirty(); } interaction = null; });
 canvas.addEventListener('mouseleave', () => interaction = null);
+// Keep Wheel Zoom logic (optional, but requested previously. Now drag is preferred, but wheel zoom is also nice)
+// User said "只能滚轮调节...请做成可以自定义拉伸".
+// I'll keep wheel zoom as an alternative shortcut.
+// Sync radius value to property panel input after resize operations
+function syncPropPanelRadius() {
+    const el = document.getElementById('pp_wheelRadius');
+    if (!el || !selected) return;
+    el.value = wheelRadiusInput.value;
+}
 
 canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
     if (!selected) return;
-    
+
     const delta = e.deltaY > 0 ? -5 : 5;
     if (selected.type === 'key') {
         let r = keyMap[selected.id].radius;
         r += delta;
         if (r < 10) r = 10;
         keyMap[selected.id].radius = r;
+        wheelRadiusInput.value = Math.round(r);
     } else if (selected.type === 'wheel') {
         let r = wheelCenter.radius;
         r += delta;
@@ -741,8 +946,9 @@ canvas.addEventListener('wheel', (e) => {
         r += delta;
         if (r < 10) r = 10;
         mouseWheels[selected.id].radius = r;
+        wheelRadiusInput.value = Math.round(r);
     } else if (selected.type === 'view') {
-        // 同时调整宽/高
+        // Resize both w/h
         let w = viewCenter.width + delta*2;
         let h = viewCenter.height + delta*2;
         if (w < 20) w = 20;
@@ -750,10 +956,16 @@ canvas.addEventListener('wheel', (e) => {
         viewCenter.width = w;
         viewCenter.height = h;
     }
+    syncPropPanelRadius();
+    markDirty();
     draw();
 }, { passive: false });
 
-// 输入改变处理程序
+// Input Change Handlers
+// Mark dirty on any input/select/checkbox change in the config panels
+document.getElementById('configSources').addEventListener('input', markDirty);
+document.getElementById('configSources').addEventListener('change', markDirty);
+
 pollingRateInput.addEventListener('change', () => {
     const rate = parseInt(pollingRateInput.value || 0, 10);
     if (rate > 0) {
@@ -783,165 +995,280 @@ wheelTriggerTimeInput.addEventListener('change', () => {
     }
 });
 
-// 辅助函数：监听单个按键或鼠标按钮
-/**
- * 监听用户的按键或鼠标点击
- * @param {function} callback - 回调函数
- */
+// Helper to listen for single key press or mouse button
 function listenForKey(callback) {
-    statusDiv.innerText = '请按下键盘按键或鼠标键... (点击空白处取消)';
-    statusDiv.style.color = 'blue';
+    setStatus('请按下键盘按键或鼠标键... (点击空白处取消)', 'blue');
     
-    // 键盘处理程序
+    // Handler for Keyboard
     const keyHandler = (e) => {
         e.preventDefault();
         e.stopPropagation();
         
         let keyName = "";
         
-        // 特殊映射
+        // Special mapping
         const codeMap = {
             "Space": "SPACE",
             "Enter": "ENTER",
             "Escape": "ESC",
             "Tab": "TAB",
             "Backspace": "BACKSPACE",
-            "Delete": "DELETE",
-            "ArrowUp": "UP",
-            "ArrowDown": "DOWN",
-            "ArrowLeft": "LEFT",
-            "ArrowRight": "RIGHT",
-            "ShiftLeft": "LSHIFT",
-            "ShiftRight": "RSHIFT",
-            "ControlLeft": "LCTRL",
-            "ControlRight": "RCTRL",
-            "AltLeft": "LALT",
-            "AltRight": "RALT",
-            "MetaLeft": "LWIN",
-            "MetaRight": "RWIN"
+            "ShiftLeft": "SHIFT",
+            "ShiftRight": "SHIFT",
+            "ControlLeft": "CTRL",
+            "ControlRight": "CTRL",
+            "AltLeft": "ALT",
+            "AltRight": "ALT",
+            "Backquote": "TILDE",
+            "Minus": "-",
+            "Equal": "=",
+            "BracketLeft": "[",
+            "BracketRight": "]",
+            "Backslash": "\\",
+            "Semicolon": ";",
+            "Quote": "'",
+            "Comma": ",",
+            "Period": ".",
+            "Slash": "/",
         };
-        
+
         if (codeMap[e.code]) {
             keyName = codeMap[e.code];
-        } else {
+        } else if (e.key === "Process" || e.key === "Unidentified") {
+            // IME 或未识别，尝试使用 code
+            keyName = e.code.toUpperCase();
+        } else if (e.key.length === 1) {
+            // alphanumeric
             keyName = e.key.toUpperCase();
-            if (keyName.length > 1 && !codeMap[e.code]) {
-                // 回退到 code
-                keyName = e.code.toUpperCase().replace('KEY', '');
-            }
+        } else if (e.code.startsWith("F") && e.code.length <= 3) {
+            // F1-F12
+            keyName = e.code;
+        } else {
+            // Fallback
+            keyName = e.key.toUpperCase();
         }
-        
+
         cleanup();
-        callback(keyName);
+        setStatus(`已识别按键: ${keyName}`, '#4caf50', 2000);
+
+        if (callback) callback(keyName, e.keyCode); // Pass keyCode as VK approximation
     };
-    
-    // 鼠标处理程序
+
+    // Handler for Mouse Buttons (Middle/Side)
     const mouseHandler = (e) => {
+        // e.button: 0=Left, 1=Middle, 2=Right, 3=X1, 4=X2
+        // We generally don't want to bind Left Click (0) as it is used for interaction
+        // But if we want to allow binding anything...
+        // MMB is 1.
+        
+        // Prevent browser default behavior (like auto-scroll)
         e.preventDefault();
         e.stopPropagation();
-        
+
         let keyName = "";
-        switch (e.button) {
-            case 0: keyName = "LMB"; break;
-            case 1: keyName = "MMB"; break;
-            case 2: keyName = "RMB"; break;
-            case 3: keyName = "X1"; break;
-            case 4: keyName = "X2"; break;
-            default: return; // 忽略其他
+        if (e.button === 1) {
+            keyName = "MMB";
+        } else if (e.button === 3) {
+            keyName = "X1";
+        } else if (e.button === 4) {
+            keyName = "X2";
+        } else {
+            // Left (0) or Right (2) - usually we might want to cancel or allow?
+            // If user clicks Left on canvas, maybe they want to cancel?
+            // But if they are binding "LMB" to a wheel (weird but possible), we should support it?
+            // For now, let's treat Left Click as Cancel if it's not on the button itself.
+            // But this handler is attached to document.
+            if (e.button === 0) {
+                 cleanup();
+                 setStatus('已取消按键录制', '', 1500);
+                 return;
+            }
+            if (e.button === 2) {
+                 // Right click context menu might interfere, but we prevented default.
+                 keyName = "RMB";
+            }
         }
-        
-        cleanup();
-        callback(keyName);
-    };
-    
-    // 点击空白处取消
-    const cancelHandler = (e) => {
-        // 忽略在按钮上的点击
-        if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
-        cleanup();
-        statusDiv.innerText = '已取消';
-        statusDiv.style.color = 'black';
+
+        if (keyName) {
+            cleanup();
+            setStatus(`已识别按键: ${keyName}`, '#4caf50', 2000);
+            
+            // Map Mouse Buttons to VK
+            let vk = 0;
+            if (keyName === "LMB") vk = 1;
+            else if (keyName === "RMB") vk = 2;
+            else if (keyName === "MMB") vk = 4;
+            else if (keyName === "X1") vk = 5;
+            else if (keyName === "X2") vk = 6;
+            
+            if (callback) callback(keyName, vk);
+        }
     };
 
-    function cleanup() {
-        window.removeEventListener('keydown', keyHandler, true);
-        window.removeEventListener('mousedown', mouseHandler, true);
-        document.removeEventListener('click', cancelHandler);
-    }
+    const cleanup = () => {
+        document.removeEventListener('keydown', keyHandler, { capture: true });
+        document.removeEventListener('mousedown', mouseHandler, { capture: true });
+        document.removeEventListener('contextmenu', preventContext, { capture: true });
+    };
 
-    window.addEventListener('keydown', keyHandler, true);
-    window.addEventListener('mousedown', mouseHandler, true);
-    // 延迟添加取消监听器，以避免触发它的点击
-    setTimeout(() => document.addEventListener('click', cancelHandler), 100);
+    const preventContext = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    document.addEventListener('keydown', keyHandler, { capture: true });
+    document.addEventListener('mousedown', mouseHandler, { capture: true });
+    document.addEventListener('contextmenu', preventContext, { capture: true });
 }
 
-// 绑定按钮事件
-btnAddWheel.addEventListener('click', () => {
-    wheelCenter = { x: canvas.width/2, y: canvas.height/2, radius: 160 };
-    wheelRadiusInput.value = 160;
-    draw();
-});
-
-btnAddMouseWheel.addEventListener('click', () => {
-    listenForKey((key) => {
-        mouseWheels.push({ key: key, x: canvas.width/2, y: canvas.height/2, radius: 100, triggerTime: 0 });
-        draw();
-        statusDiv.innerText = `已添加鼠标滚轮: ${key}`;
-    });
-});
-
-btnAddView.addEventListener('click', () => {
-    viewCenter = { x: canvas.width/2, y: canvas.height/3, width: DEFAULT_VIEW_W, height: DEFAULT_VIEW_H };
-    draw();
-});
-
-btnAddLMB.addEventListener('click', () => {
-    pendingKeyName = 'LMB';
-    statusDiv.innerText = '请点击屏幕位置以放置 LMB';
-});
-
-btnAddRMB.addEventListener('click', () => {
-    pendingKeyName = 'RMB';
-    statusDiv.innerText = '请点击屏幕位置以放置 RMB';
-});
-
-btnAddSide1.addEventListener('click', () => {
-    pendingKeyName = 'X1';
-    statusDiv.innerText = '请点击屏幕位置以放置侧键1';
-});
-
-btnAddSide2.addEventListener('click', () => {
-    pendingKeyName = 'X2';
-    statusDiv.innerText = '请点击屏幕位置以放置侧键2';
-});
-
-btnAddCustom.addEventListener('click', () => {
-    listenForKey((key) => {
-        pendingKeyName = key;
-        statusDiv.innerText = `已捕获 ${key}，请点击屏幕位置以放置`;
-    });
-});
-
-btnSetScrollUp.addEventListener('click', () => {
-    pendingScrollSet = { type: 'scrollUp', step: 0 };
-    statusDiv.innerText = scrollUpMode.value === 'swipe' ? '请点击设置起点' : '请点击设置点击位置';
-});
-
-btnSetScrollDown.addEventListener('click', () => {
-    pendingScrollSet = { type: 'scrollDown', step: 0 };
-    statusDiv.innerText = scrollDownMode.value === 'swipe' ? '请点击设置起点' : '请点击设置点击位置';
-});
-
-// 保存逻辑
-saveBtn.addEventListener('click', async () => {
-    const refW = canvas.width;
-    const refH = canvas.height;
+// Add double-click listeners to key inputs
+function setupKeyRecorder(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
     
-    const normX = (v) => v / refW;
-    const normY = (v) => v / refH;
-    const normR = (v) => v / refH; 
+    input.addEventListener('dblclick', () => {
+        input.style.backgroundColor = '#e0f7fa'; // Highlight
+        input.value = "请按键...";
+        listenForKey((key) => {
+            input.value = key;
+            input.style.backgroundColor = '';
+            // Trigger change event manually if needed
+            input.dispatchEvent(new Event('change'));
+        });
+    });
+    
+    // Add tooltip if not present
+    if (!input.title) {
+        input.title = "双击此处可直接录制按键";
+    } else {
+        input.title += " (双击可录制)";
+    }
+}
 
-    // 清理并归一化 KeyMap
+// Initialize recorders
+setupKeyRecorder('toggleKeyInput');
+setupKeyRecorder('overlayKeyInput');
+setupKeyRecorder('wheelModifierKey');
+
+// Scroll Buttons
+btnSetScrollUp.addEventListener('click', () => {
+    if (scrollUpMode.value === 'none') {
+        setStatus('请先在左侧选择模式 (点击或滑动)', 'red', 2500);
+        return;
+    }
+    pendingScrollSet = { type: 'scrollUp', step: 0 };
+    canvas.classList.add('pending');
+    const hint = scrollUpMode.value === 'tap' ? '点击画布设置滚轮上滑点击位置 | ESC 取消' : '点击画布设置滚轮上滑起始点 | ESC 取消';
+    showCanvasHint(hint, true);
+    setStatus(scrollUpMode.value === 'tap' ? '请点击设置点击位置' : '请点击设置滑动起始点', 'blue');
+});
+btnSetScrollDown.addEventListener('click', () => {
+    if (scrollDownMode.value === 'none') {
+        setStatus('请先在左侧选择模式 (点击或滑动)', 'red', 2500);
+        return;
+    }
+    pendingScrollSet = { type: 'scrollDown', step: 0 };
+    canvas.classList.add('pending');
+    const hint = scrollDownMode.value === 'tap' ? '点击画布设置滚轮下滑点击位置 | ESC 取消' : '点击画布设置滚轮下滑起始点 | ESC 取消';
+    showCanvasHint(hint, true);
+    setStatus(scrollDownMode.value === 'tap' ? '请点击设置点击位置' : '请点击设置滑动起始点', 'blue');
+});
+scrollUpMode.addEventListener('change', () => {
+    scrollUpConfig.mode = scrollUpMode.value;
+    draw();
+});
+scrollDownMode.addEventListener('change', () => {
+    scrollDownConfig.mode = scrollDownMode.value;
+    draw();
+});
+
+// Add Buttons
+function startAddKey(name) {
+    pendingKeyName = name;
+    canvas.classList.add('pending');
+    showCanvasHint(`点击画布放置 [${name}] | ESC 取消`, true);
+    setStatus(`请点击画布设置 [${name}] 的位置`, 'blue');
+}
+if (btnAddLMB) btnAddLMB.addEventListener('click', () => startAddKey('LMB'));
+if (btnAddRMB) btnAddRMB.addEventListener('click', () => startAddKey('RMB'));
+if (btnAddSide1) btnAddSide1.addEventListener('click', () => startAddKey('X1'));
+if (btnAddSide2) btnAddSide2.addEventListener('click', () => startAddKey('X2'));
+if (btnAddCustom) {
+    btnAddCustom.addEventListener('click', () => {
+        listenForKey((keyName) => {
+            startAddKey(keyName);
+        });
+    });
+}
+btnAddWheel.addEventListener('click', () => {
+    wheelCenter = { x: canvas.width/4, y: canvas.height/2, radius: parseInt(wheelRadiusInput.value||160) };
+    markDirty();
+    draw();
+});
+btnAddMouseWheel.addEventListener('click', () => {
+    setStatus('请按下要绑定轮盘的按键...', 'blue');
+    listenForKey((key) => {
+        mouseWheels.push({
+            key: key,
+            x: canvas.width/2,
+            y: canvas.height/2,
+            radius: 100,
+            triggerTime: 0
+        });
+        markDirty();
+        draw();
+    });
+});
+btnAddView.addEventListener('click', () => {
+    viewCenter = { x: canvas.width*3/4, y: canvas.height/2, width: DEFAULT_VIEW_W, height: DEFAULT_VIEW_H };
+    markDirty();
+    draw();
+});
+
+// Image Upload
+imgInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+        const img = new Image();
+        img.onload = () => {
+            bgImg = img;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            targetWInput.value = img.width;
+            targetHInput.value = img.height;
+            draw();
+        };
+        img.src = evt.target.result;
+    };
+    reader.readAsDataURL(file);
+});
+
+// Reference Resolution Change Handlers
+function updateCanvasSize() {
+    const w = parseInt(targetWInput.value, 10);
+    const h = parseInt(targetHInput.value, 10);
+    if (w > 0 && h > 0) {
+        canvas.width = w;
+        canvas.height = h;
+        draw();
+    }
+}
+targetWInput.addEventListener('change', updateCanvasSize);
+targetHInput.addEventListener('change', updateCanvasSize);
+
+// Save
+saveBtn.addEventListener('click', async () => {
+    const refW = parseInt(targetWInput.value || '1080', 10);
+    const refH = parseInt(targetHInput.value || '2400', 10);
+
+    // Helper to normalize
+    const normX = (v) => parseFloat((v / refW).toFixed(4));
+    const normY = (v) => parseFloat((v / refH).toFixed(4));
+    const normR = (v) => parseFloat((v / refH).toFixed(4)); // Radius normalized by Height
+
+    // Clean keyMap
     const cleanKeyMap = {};
     Object.entries(keyMap).forEach(([k, v]) => {
         cleanKeyMap[k] = {
@@ -952,7 +1279,7 @@ saveBtn.addEventListener('click', async () => {
     });
 
     const payload = {
-        port: portInput.value,
+        port: portInput.value || "COM5",
         rotation: parseInt(rotationInput.value || "0", 10),
         toggleKey: toggleKeyInput.value || "ALT",
         overlayKey: overlayKeyInput.value || "F8",
@@ -1005,6 +1332,26 @@ saveBtn.addEventListener('click', async () => {
             endY: normY(scrollDownConfig.endY || 0),
             duration: parseInt(scrollDuration.value || '200', 10)
         } : null,
+        
+        // vPointer
+        vPointerIp: document.getElementById('vPointerIp').value || "192.168.1.100",
+        vPointerPort: parseInt(document.getElementById('vPointerPort').value || "6533", 10),
+        vPointerRotation: parseInt(document.getElementById('vPointerRotation').value || "0", 10),
+        enableVPointer: document.getElementById('enableVPointer').checked,
+
+        antiCheat: {
+            initDirAngleRange: parseFloat(document.getElementById('acInitAngle').value || "0.35"),
+            initRadiusScaleRange: parseFloat(document.getElementById('acInitScale').value || "0.1"),
+            microMoveSpeed: parseFloat(document.getElementById('acMicroSpeed').value || "0.05"),
+            microMoveRange: parseFloat(document.getElementById('acMicroRange').value || "0.008"),
+            microMoveDelayMs: parseInt(document.getElementById('acMicroDelay').value || "1000", 10),
+            randomOffsetRange: parseFloat(document.getElementById('acRandomOffset').value || "0.005"),
+            // Default unused params
+            driftHoldTimeMin: 200, driftHoldTimeMax: 1500,
+            driftDurationMin: 50, driftDurationMax: 150
+        },
+
+        macros: macros,
         sendIntervalMs: parseInt(sendIntervalInput.value || 8),
         pollingRate: parseInt(pollingRateInput.value || 0),
         license: licenseInput.value.trim()
@@ -1017,26 +1364,24 @@ saveBtn.addEventListener('click', async () => {
             body: JSON.stringify(payload)
         });
         if (resp.ok) {
-            statusDiv.innerText = '配置保存成功！';
-            statusDiv.style.color = 'green';
+            setStatus('配置保存成功！', 'green', 3000);
+            clearDirty();
         } else {
-            statusDiv.innerText = '保存失败: ' + await resp.text();
-            statusDiv.style.color = 'red';
+            setStatus('保存失败: ' + await resp.text(), 'red');
         }
     } catch (e) {
-        statusDiv.innerText = '请求错误: ' + e.message;
-        statusDiv.style.color = 'red';
+        setStatus('保存失败：无法连接到发送端程序，请先运行 QInETouch.exe', 'red');
     }
 });
 
-// 加载逻辑
+// Load
 loadBtn.addEventListener('click', async () => {
     try {
         const resp = await fetch('/load');
         if (!resp.ok) throw new Error(await resp.text());
         const data = await resp.json();
         
-        // 填充输入框
+        // Populate inputs
         if (data.port) portInput.value = data.port;
         if (data.rotation !== undefined) rotationInput.value = data.rotation;
         if (data.toggleKey) toggleKeyInput.value = data.toggleKey;
@@ -1050,7 +1395,8 @@ loadBtn.addEventListener('click', async () => {
             sendIntervalInput.title = "已启用回报率，间隔由回报率自动计算";
         }
         
-        // 优先级：图片 -> uiReferenceWidth -> LegacyTargetWidth -> 默认
+        // Canvas Size?
+        // Priority: Image -> uiReferenceWidth -> LegacyTargetWidth -> Default
         let refW = 1080;
         let refH = 2400;
 
@@ -1058,6 +1404,7 @@ loadBtn.addEventListener('click', async () => {
             refW = data.uiReferenceWidth;
             refH = data.uiReferenceHeight;
         } else if (data.targetWidth && data.targetHeight) {
+             // Legacy fallback
             refW = data.targetWidth;
             refH = data.targetHeight;
         }
@@ -1068,32 +1415,37 @@ loadBtn.addEventListener('click', async () => {
             targetWInput.value = refW;
             targetHInput.value = refH;
         } else {
+            // If image loaded, use image size, but keep refW/refH for denormalization if needed?
+            // Actually, if image is loaded, user wants to map to THIS image.
+            // So we should map normalized coords to CURRENT canvas size.
             refW = canvas.width;
             refH = canvas.height;
             targetWInput.value = refW;
             targetHInput.value = refH;
         }
 
-        // 反归一化辅助函数
+        // Helpers to denormalize
+        // If val <= 1.0, treat as normalized. Else treat as pixels (legacy).
+        // Note: Coordinates can be > 1.0 if outside screen? Unlikely for valid config.
         const denormX = (v) => (v <= 1.0 && v >= 0) ? v * refW : v;
         const denormY = (v) => (v <= 1.0 && v >= 0) ? v * refH : v;
         const denormR = (v) => (v <= 1.0 && v >= 0) ? v * refH : v; 
 
-        // 填充按键映射
+        // Populate KeyMap
         keyMap = {};
         if (data.keyMap) {
             Object.entries(data.keyMap).forEach(([k, v]) => {
                 keyMap[k] = {
                     x: denormX(v.x), 
                     y: denormY(v.y), 
-                    radius: denormR(v.radius || (DEFAULT_KEY_RADIUS/refH)) // 如果缺失，使用默认比例
+                    radius: denormR(v.radius || (DEFAULT_KEY_RADIUS/refH)) // If missing, use default ratio
                 };
-                // 半径安全检查，如果为0或太小
+                // Safety check for radius if it became 0 or tiny
                 if (keyMap[k].radius < 5) keyMap[k].radius = DEFAULT_KEY_RADIUS;
             });
         }
         
-        // 填充轮盘
+        // Populate Wheel
         if (data.movementWheel) {
             wheelCenter = {
                 x: denormX(data.movementWheel.center.x),
@@ -1103,7 +1455,7 @@ loadBtn.addEventListener('click', async () => {
             if (wheelCenter.radius < 10) wheelCenter.radius = 160;
             wheelRadiusInput.value = Math.round(wheelCenter.radius);
 
-            // 填充行走半径和修饰键
+            // Populate Walk Radius & Modifier
             const wR = denormR(data.movementWheel.walkRadius || 0);
             wheelWalkRadius.value = wR > 0 ? Math.round(wR) : Math.round(wheelCenter.radius * 0.5);
             wheelModifierKey.value = data.movementWheel.modifierKey || "";
@@ -1114,7 +1466,7 @@ loadBtn.addEventListener('click', async () => {
             wheelCenter = null;
         }
 
-        // 填充鼠标滚轮
+        // Populate MouseWheels
         mouseWheels = [];
         if (data.mouseWheels && Array.isArray(data.mouseWheels)) {
             mouseWheels = data.mouseWheels.map(mw => ({
@@ -1129,7 +1481,7 @@ loadBtn.addEventListener('click', async () => {
             });
         }
         
-        // 填充视角
+        // Populate View
         if (data.viewArea) {
             viewCenter = {
                 x: denormX(data.viewArea.center.x),
@@ -1161,7 +1513,7 @@ loadBtn.addEventListener('click', async () => {
         viewBindLMBInput.checked = true; // 默认勾选，保持向下兼容
     }
 
-    // 填充滚动
+    // Populate Scroll
     if (data.scrollUp) {
         scrollUpMode.value = data.scrollUp.mode || 'none';
         scrollUpConfig = {
@@ -1191,34 +1543,55 @@ loadBtn.addEventListener('click', async () => {
             endY: denormY(data.scrollDown.endY || 0),
             duration: data.scrollDown.duration || 200
         };
-        // 如果 scrollDown 有不同的持续时间，可能会覆盖 UI，但为了简单起见，我们共享一个输入框
+        // If scrollDown has diff duration, it might overwrite UI, but we share one input for simplicity
     } else {
         scrollDownMode.value = 'none';
         scrollDownConfig = { mode: 'none' };
     }
+    
+    // Populate vPointer
+    if (data.vPointerIp) document.getElementById('vPointerIp').value = data.vPointerIp;
+    if (data.vPointerPort) document.getElementById('vPointerPort').value = data.vPointerPort;
+    if (data.vPointerRotation !== undefined) document.getElementById('vPointerRotation').value = data.vPointerRotation;
+    if (data.enableVPointer !== undefined) document.getElementById('enableVPointer').checked = data.enableVPointer;
 
     if (data.license) {
         licenseInput.value = data.license;
     }
     
-    statusDiv.innerText = '配置已加载 (归一化转换完成)';
-        statusDiv.style.color = 'green';
+    // Populate AntiCheat
+    if (data.antiCheat) {
+        if (data.antiCheat.initDirAngleRange !== undefined) document.getElementById('acInitAngle').value = data.antiCheat.initDirAngleRange;
+        if (data.antiCheat.initRadiusScaleRange !== undefined) document.getElementById('acInitScale').value = data.antiCheat.initRadiusScaleRange;
+        if (data.antiCheat.microMoveSpeed !== undefined) document.getElementById('acMicroSpeed').value = data.antiCheat.microMoveSpeed;
+        if (data.antiCheat.microMoveRange !== undefined) document.getElementById('acMicroRange').value = data.antiCheat.microMoveRange;
+        if (data.antiCheat.microMoveDelayMs !== undefined) document.getElementById('acMicroDelay').value = data.antiCheat.microMoveDelayMs;
+        if (data.antiCheat.randomOffsetRange !== undefined) document.getElementById('acRandomOffset').value = data.antiCheat.randomOffsetRange;
+    }
+
+    // Populate Macros
+    if (data.macros) {
+        macros = data.macros;
+    } else {
+        macros = [];
+    }
+    renderMacroList();
+    
+    setStatus('配置已加载', 'green', 3000);
+        clearDirty();
         draw();
         
     } catch (e) {
-        statusDiv.innerText = '加载失败: ' + e.message;
-        statusDiv.style.color = 'red';
+        setStatus('加载失败：无法连接到发送端程序，请先运行 QInETouch.exe', 'red');
     }
 });
 
-// 设备信息轮询
-/**
- * 轮询设备信息
- */
+// Device Info Polling
 function pollDeviceInfo() {
     fetch('/device_info')
     .then(res => res.json())
     .then(data => {
+        // data: { connected: bool, mac: string, status: string, lastSeen: int64 }
         const now = Math.floor(Date.now() / 1000);
         const isOnline = data.connected && (now - data.lastSeen < 5); // 5s timeout
         
@@ -1245,13 +1618,104 @@ function pollDeviceInfo() {
         }
     })
     .catch(() => {
-        connStatus.innerText = '服务连接失败';
+        connStatus.innerText = '未连接 (发送端未运行)';
         connStatus.style.color = 'red';
     });
 }
 
-// 每2秒轮询一次
+// Start polling every 2s
 setInterval(pollDeviceInfo, 2000);
-pollDeviceInfo(); // 立即执行
+pollDeviceInfo(); // immediate
+
+// ==========================================
+// Property Panel
+// ==========================================
+const propPanel = document.getElementById('propPanel');
+const propPanelTitle = document.getElementById('propPanelTitle');
+const propPanelContent = document.getElementById('propPanelContent');
+const propPanelHeader = document.getElementById('propPanelHeader');
+
+function showPropPanel(type) {
+    propPanel.style.display = 'flex';
+    let html = '';
+    if (type === 'wheel') {
+        propPanelTitle.textContent = 'WASD 轮盘属性';
+        html = `
+        <div class="param-row"><label title="轮盘半径">半径:</label><input id="pp_wheelRadius" type="number" class="small-input" value="${wheelRadiusInput.value}"></div>
+        <div class="param-row"><label title="静步键">静步键:</label><input id="pp_wheelModifierKey" type="text" class="small-input" value="${wheelModifierKey.value}" placeholder="SHIFT"></div>
+        <div class="param-row"><label title="静步半径">静步半径:</label><input id="pp_wheelWalkRadius" type="number" class="small-input" value="${wheelWalkRadius.value}"></div>
+        <div class="param-row"><label title="弹簧刚度 (默认0.015)">刚度:</label><input id="pp_wheelStiffness" type="number" step="0.001" class="small-input" value="${wheelStiffness.value}"></div>
+        <div class="param-row"><label title="阻尼系数 (默认0.25)">阻尼:</label><input id="pp_wheelDamping" type="number" step="0.01" class="small-input" value="${wheelDamping.value}"></div>
+        `;
+    } else if (type === 'mouseWheel') {
+        propPanelTitle.textContent = '鼠标轮盘属性';
+        html = `
+        <div class="param-row"><label>半径:</label><input id="pp_wheelRadius" type="number" class="small-input" value="${wheelRadiusInput.value}"></div>
+        <div class="param-row"><label title="长按进入轮盘(ms)">长按(ms):</label><input id="pp_wheelTriggerTime" type="number" class="small-input" value="${wheelTriggerTimeInput.value}"></div>
+        `;
+    } else if (type === 'view') {
+        propPanelTitle.textContent = '视角区属性';
+        html = `
+        <div class="param-row"><label>灵敏度:</label><input id="pp_viewSensitivity" type="number" step="0.1" class="small-input" value="${viewSensitivityInput.value}"></div>
+        <div class="param-row"><label title="加速度 (0=禁用)">加速度:</label><input id="pp_viewAcceleration" type="number" step="0.1" class="small-input" value="${viewAcceleration.value}"></div>
+        <div class="param-row"><label title="静止自动抬起(ms), 0禁用">自动抬起:</label><input id="pp_viewAutoRelease" type="number" class="small-input" value="${viewAutoReleaseInput.value}"></div>
+        <div class="param-row"><label>绑左键:</label><input id="pp_viewBindLMB" type="checkbox" ${viewBindLMBInput.checked ? 'checked' : ''}></div>
+        `;
+    } else if (type === 'key') {
+        propPanelTitle.textContent = '按键属性';
+        html = `
+        <div class="param-row"><label>半径:</label><input id="pp_wheelRadius" type="number" class="small-input" value="${wheelRadiusInput.value}"></div>
+        `;
+    }
+    propPanelContent.innerHTML = html;
+
+    // Wire up key recorder for modifier key input (dynamically created)
+    setupKeyRecorder('pp_wheelModifierKey');
+
+    // Wire up real-time sync back to hidden inputs
+    const bind = (ppId, hiddenInput, isCheckbox) => {
+        const el = document.getElementById(ppId);
+        if (!el) return;
+        el.addEventListener(isCheckbox ? 'change' : 'input', () => {
+            if (isCheckbox) hiddenInput.checked = el.checked;
+            else hiddenInput.value = el.value;
+            markDirty();
+        });
+    };
+    bind('pp_wheelRadius', wheelRadiusInput);
+    bind('pp_wheelModifierKey', wheelModifierKey);
+    bind('pp_wheelWalkRadius', wheelWalkRadius);
+    bind('pp_wheelStiffness', wheelStiffness);
+    bind('pp_wheelDamping', wheelDamping);
+    bind('pp_wheelTriggerTime', wheelTriggerTimeInput);
+    bind('pp_viewSensitivity', viewSensitivityInput);
+    bind('pp_viewAcceleration', viewAcceleration);
+    bind('pp_viewAutoRelease', viewAutoReleaseInput);
+    bind('pp_viewBindLMB', viewBindLMBInput, true);
+}
+
+function hidePropPanel() {
+    propPanel.style.display = 'none';
+    propPanelContent.innerHTML = '';
+}
+
+// Drag for propPanel
+(function setupPropPanelDrag() {
+    let dragging = false, ox = 0, oy = 0;
+    propPanelHeader.addEventListener('mousedown', (e) => {
+        dragging = true;
+        ox = e.clientX - propPanel.getBoundingClientRect().left;
+        oy = e.clientY - propPanel.getBoundingClientRect().top;
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        propPanel.style.right = 'auto';
+        propPanel.style.bottom = 'auto';
+        propPanel.style.left = (e.clientX - ox) + 'px';
+        propPanel.style.top = (e.clientY - oy) + 'px';
+    });
+    document.addEventListener('mouseup', () => { dragging = false; });
+})();
 
 init();
